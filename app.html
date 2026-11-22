@@ -157,6 +157,10 @@ table.fmt td p:last-child { margin-bottom: 0; }
 .empty { text-align: center; padding: 36px 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
 .empty b { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: 4px; }
 
+.sync { border-color: var(--warm); background: var(--warm-soft); }
+.sync p { margin: 6px 0 0; font-size: .9rem; }
+.sync code { font-size: .85em; }
+.solo { font-size: .75rem; font-weight: 600; color: var(--warm); }
 /* Avance */
 .av-sum { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; }
 .av-sum b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
@@ -258,11 +262,12 @@ table.fmt td p:last-child { margin-bottom: 0; }
       </div>
       <div class="row">
         <button class="btn primary" id="btnNew2">Nueva planeación</button>
-        <button class="btn" id="btnBackup">Descargar respaldo</button>
-        <button class="btn" id="btnRestore">Cargar respaldo</button>
+        <button class="btn" id="btnBackup">Descargar banco</button>
+        <button class="btn" id="btnRestore">Cargar banco</button>
         <input type="file" id="fileRestore" accept=".json,application/json" hidden>
       </div>
     </div>
+    <div class="card sync" id="syncNote" hidden></div>
     <div id="bankList"></div>
   </section>
 
@@ -386,7 +391,11 @@ table.fmt td p:last-child { margin-bottom: 0; }
   const current = () => plans.find((p) => p.id === currentId) || null;
 
   // ------------------------------------------------------------------ almacenamiento (nube del artifact o este dispositivo)
-  const LKEY = "bancoPlaneaciones.v2", GKEY = "bancoPlaneaciones.general.v2", CKEY = "bancoPlaneaciones.actual";
+  const LKEY = "bancoPlaneaciones.v2", GKEY = "bancoPlaneaciones.general.v2", CKEY = "bancoPlaneaciones.actual", HKEY = "bancoPlaneaciones.ocultas";
+  // Fuera de Claude (sitio propio): el banco compartido vive en banco.json; lo que se crea o cambia en un
+  // dispositivo se guarda en ese navegador hasta que se sube un banco.json nuevo.
+  let shared = [], localPlans = [], hidden = [], sharedOk = false;
+  const origen = {};
   const ls = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
@@ -412,37 +421,59 @@ table.fmt td p:last-child { margin-bottom: 0; }
         if (s.exists) { general = Object.assign(general, s.data()); renderGeneralInputs(); renderSheet(); }
       }, () => {});
     } else {
-      mode = "local"; loaded = true;
-      setStatus("warn", "Guardado solo en este dispositivo");
+      mode = "local";
       $("#btnPrint").hidden = inViewer;
       general = Object.assign(general, ls.get(GKEY, {}));
-      plans = (ls.get(LKEY, []) || []).map(normalize);
-      if (!plans.length) loadSamplesOffline();
-      renderAll(); renderGeneralInputs();
+      localPlans = (ls.get(LKEY, []) || []).map(normalize);
+      hidden = ls.get(HKEY, []) || [];
+      renderGeneralInputs();
+      try {
+        const r = await fetch("banco.json", { cache: "no-cache" });
+        if (!r.ok) throw new Error(String(r.status));
+        const d = await r.json();
+        shared = (Array.isArray(d) ? d : d.planeaciones || []).filter((p) => p && p.id && p.proyecto).map(normalize);
+        sharedOk = true;
+      } catch (e) { shared = []; sharedOk = false; }
+      // Si el banco.json ya trae la misma versión (o una más nueva) de algo guardado aquí, ya no hace falta la copia local.
+      localPlans = localPlans.filter((lp) => { const sp = shared.find((x) => x.id === lp.id); return !sp || String(lp.actualizado || "") > String(sp.actualizado || ""); });
+      hidden = hidden.filter((id) => shared.some((x) => x.id === id));
+      ls.set(LKEY, localPlans); ls.set(HKEY, hidden);
+      loaded = true; rebuildLocal(); renderAll();
     }
   }
-  function loadSamplesOffline() {
-    const s = document.createElement("script");
-    s.src = "banco-inicial.js";
-    s.onload = () => { if (!plans.length && Array.isArray(window.BANCO_INICIAL)) { plans = window.BANCO_INICIAL.map(normalize); ls.set(LKEY, plans); renderAll(); } };
-    document.head.appendChild(s);
+  function rebuildLocal() {
+    Object.keys(origen).forEach((k) => delete origen[k]);
+    const out = [];
+    shared.forEach((p) => { if (!hidden.includes(p.id) && !localPlans.some((l) => l.id === p.id)) { out.push(p); origen[p.id] = "banco"; } });
+    localPlans.forEach((p) => { out.push(p); origen[p.id] = shared.some((x) => x.id === p.id) ? "modificada" : "dispositivo"; });
+    plans = out;
+    const n = pendientes();
+    if (!sharedOk) setStatus("warn", "Guardado solo en este dispositivo");
+    else if (n) setStatus("warn", n === 1 ? "1 cambio solo en este dispositivo" : n + " cambios solo en este dispositivo");
+    else setStatus("cloud", "Banco al día");
   }
+  const pendientes = () => localPlans.length + hidden.length;
   async function savePlan(p) {
     const body = clone(p); delete body.id; body.actualizado = new Date().toISOString();
     if (mode === "cloud") {
       try { await db.collection("planeaciones").doc(p.id).set(body); }
       catch (e) { toast(e && e.code === "quota_exceeded" ? "Tu banco está lleno. Elimina alguna planeación y vuelve a intentar." : "No se pudo guardar. Revisa tu conexión y vuelve a intentar."); throw e; }
     } else {
-      const i = plans.findIndex((x) => x.id === p.id);
       const full = normalize(Object.assign(body, { id: p.id }));
-      if (i >= 0) plans[i] = full; else plans.push(full);
-      if (!ls.set(LKEY, plans)) toast("El navegador no permitió guardar. Usa “Descargar respaldo”.");
-      renderAll();
+      const i = localPlans.findIndex((x) => x.id === p.id);
+      if (i >= 0) localPlans[i] = full; else localPlans.push(full);
+      hidden = hidden.filter((x) => x !== p.id);
+      const ok = ls.set(LKEY, localPlans); ls.set(HKEY, hidden);
+      if (!ok) toast("El navegador no permitió guardar. Usa “Descargar banco”.");
+      rebuildLocal(); renderAll();
     }
   }
   async function removePlan(id) {
-    if (mode === "cloud") await db.collection("planeaciones").doc(id).delete();
-    else { plans = plans.filter((p) => p.id !== id); ls.set(LKEY, plans); renderAll(); }
+    if (mode === "cloud") { await db.collection("planeaciones").doc(id).delete(); return; }
+    localPlans = localPlans.filter((p) => p.id !== id);
+    if (shared.some((p) => p.id === id) && !hidden.includes(id)) hidden.push(id);
+    ls.set(LKEY, localPlans); ls.set(HKEY, hidden);
+    rebuildLocal(); renderAll();
   }
   let gTimer = null;
   function saveGeneralSoon() {
@@ -649,7 +680,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
   }
-  const fileSafe = (s) => String(s || "planeacion").replace(/[\\/:*?"<>|“”]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const fileSafe = (s) => String(s || "planeacion").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ._()-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80) || "planeacion";
 
   // ------------------------------------------------------------------ editor
   function startEdit(plan) {
@@ -821,10 +852,18 @@ table.fmt td p:last-child { margin-bottom: 0; }
     fc.innerHTML = '<option value="">Todos los campos formativos</option>' + CAMPOS.map((c) => `<option${c === vc ? " selected" : ""}>${esc(c)}</option>`).join("");
     fe.innerHTML = '<option value="">Todos los ejes</option>' + EJES.map((c) => `<option${c === ve ? " selected" : ""}>${esc(c)}</option>`).join("");
   }
+  function renderSync() {
+    const box = $("#syncNote"); if (!box) return;
+    const n = mode === "local" && sharedOk ? pendientes() : 0;
+    box.hidden = !n;
+    if (n) box.innerHTML = `<b>Tienes ${n === 1 ? "1 cambio" : n + " cambios"} guardados solo en este dispositivo.</b>
+      <p>Para verlos también en tu otro dispositivo, pulsa “Descargar banco” y sube el archivo <code>banco.json</code> a tu repositorio en GitHub (Add file → Upload files), reemplazando el anterior. En uno o dos minutos el sitio se actualiza en todos tus dispositivos.</p>`;
+  }
   function renderBank() {
+    renderSync();
     const el = $("#bankList");
     if (!loaded) { el.innerHTML = '<div class="empty"><b>Cargando tu banco…</b>Tus planeaciones aparecerán aquí.</div>'; return; }
-    if (!plans.length) { el.innerHTML = '<div class="empty"><b>Tu banco está vacío</b>Pulsa “Nueva planeación” para capturar la primera, o “Cargar respaldo” si tienes un archivo de respaldo.</div>'; return; }
+    if (!plans.length) { el.innerHTML = '<div class="empty"><b>Tu banco está vacío</b>Pulsa “Nueva planeación” para capturar la primera, o “Cargar banco” si tienes un archivo banco.json.</div>'; return; }
     const q = $("#q").value.trim().toLowerCase(), fc = $("#fCampo").value, fe = $("#fEje").value;
     const list = plans.filter((p) => (!q || planText(p).includes(q)) && (!fc || (p.campos[fc] || []).some((e) => e.contenido || e.pdas.length)) && (!fe || p.ejes.includes(fe)))
       .sort((a, b) => a.proyecto.localeCompare(b.proyecto, "es"));
@@ -835,6 +874,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
       return `<article class="pcard${p.id === currentId ? " current" : ""}"><h3>${esc(p.proyecto)}</h3>
         <div class="chips">${cs.map((c) => `<span class="cchip" style="background:#${CAMPO_COLOR[c].fill};color:#${CAMPO_COLOR[c].ink}">${esc(c)}</span>`).join("")}</div>
         <p>${esc(p.finalidad || p.problematica || "Sin finalidad escrita.")}</p>
+        ${origen[p.id] === "dispositivo" ? '<div class="solo">Nueva · solo en este dispositivo</div>' : origen[p.id] === "modificada" ? '<div class="solo">Con cambios · solo en este dispositivo</div>' : ""}
         <div class="meta">${p.actividades.length} actividades${p.modalidad.length ? " · " + esc(p.modalidad.join(", ")) : ""}${fechas.length ? " · " + esc(fechas[0]) + (fechas.length > 1 ? " a " + esc(fechas[fechas.length - 1]) : "") : ""}</div>
         <div class="row"><button class="btn sm primary" data-use="${esc(p.id)}">Usar en el formato</button><button class="btn sm" data-edit="${esc(p.id)}">Editar</button><button class="btn sm" data-copy="${esc(p.id)}">Duplicar</button><button class="btn sm danger" data-del="${esc(p.id)}">Eliminar</button></div></article>`;
     }).join("")}</div>`;
@@ -859,22 +899,22 @@ table.fmt td p:last-child { margin-bottom: 0; }
 
   $("#btnBackup").addEventListener("click", () => {
     if (!plans.length) { toast("Tu banco está vacío."); return; }
-    const data = JSON.stringify({ tipo: "banco-planeaciones", version: 2, fecha: new Date().toISOString(), general, planeaciones: plans }, null, 1);
-    offerFile("respaldo-banco-planeaciones-" + new Date().toISOString().slice(0, 10) + ".json", new Blob([data], { type: "application/json" }));
+    const data = JSON.stringify({ tipo: "banco-planeaciones", version: 2, fecha: new Date().toISOString(), planeaciones: plans.map((p) => clone(p)) }, null, 1);
+    offerFile("banco.json", new Blob([data], { type: "application/json" }));
   });
   $("#btnRestore").addEventListener("click", () => $("#fileRestore").click());
   $("#fileRestore").addEventListener("change", async (ev) => {
     const f = ev.target.files[0]; ev.target.value = ""; if (!f) return;
     let list;
     try { const d = JSON.parse(await f.text()); list = Array.isArray(d) ? d : d.planeaciones; if (!Array.isArray(list)) throw 0; }
-    catch (e) { toast("Ese archivo no es un respaldo del banco."); return; }
+    catch (e) { toast("Ese archivo no es un banco de planeaciones."); return; }
     let n = 0;
     for (const raw of list) {
       if (!raw || !raw.proyecto) continue;
       const p = normalize(raw); if (!p.id || !/^[A-Za-z0-9_.~:@+-]{1,180}$/.test(p.id)) p.id = slug(p.proyecto);
       try { await savePlan(p); n++; } catch (e) { break; }
     }
-    toast(`Respaldo cargado: ${n} planeaciones.`);
+    toast(`Banco cargado: ${n} planeaciones.`);
   });
 
   // ------------------------------------------------------------------ formato: eventos
@@ -893,7 +933,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
   $("#btnWord").addEventListener("click", async (ev) => {
     const p = current(); if (!p) { toast("Primero elige un proyecto."); return; }
     const b = ev.currentTarget; b.disabled = true; const t = b.textContent; b.textContent = "Preparando…";
-    try { const blob = await buildDocx(p); await offerFile("Planeación - " + fileSafe(p.proyecto) + ".docx", blob); }
+    try { const blob = await buildDocx(p); await offerFile("Planeacion - " + fileSafe(p.proyecto) + ".docx", blob); }
     catch (e) { toast(e && e.message === "no-zip" ? "Falta conexión a internet para armar el Word." : "No se pudo armar el Word."); }
     finally { b.disabled = false; b.textContent = t; }
   });
