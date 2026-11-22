@@ -162,6 +162,32 @@ table.fmt td p:last-child { margin-bottom: 0; }
 .empty { text-align: center; padding: 36px 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
 .empty b { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: 4px; }
 
+/* Avance */
+.av-sum { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; }
+.av-sum b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.av-campo { background: var(--surface); border: 1px solid var(--line); border-top: 5px solid var(--cf); border-radius: 12px; padding: 12px 14px; }
+.av-campo > header { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.av-campo > header b { font-size: 1rem; }
+.av-campo > header span { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { flex: 1 1 100%; height: 6px; border-radius: 99px; background: var(--bg); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--cf); }
+.av-row { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 6px 12px; padding: 7px 0; border-top: 1px solid var(--line); align-items: start; }
+.av-row:first-of-type { border-top: 0; }
+.av-cont { font-size: .82rem; color: var(--muted); }
+.av-cont b { color: var(--ink); }
+.av-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.av-chip { min-width: 3.1rem; border: 1.5px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 6px; padding: 3px 6px; font: 600 .78rem var(--f-ui); font-variant-numeric: tabular-nums; cursor: pointer; }
+.av-chip.on { background: var(--cf); border-color: var(--cf); color: var(--cfi); }
+.av-chip[aria-pressed="true"] { outline: 2px solid var(--warm); outline-offset: 1px; }
+.av-detail { grid-column: 1 / -1; background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: .88rem; }
+.av-detail p { margin: 0 0 6px; }
+.av-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .8rem; color: var(--muted); align-items: center; }
+.av-legend .av-chip { cursor: default; min-width: 0; }
+.ayuda { margin: -4px 0 10px; font-size: .82rem; color: var(--warm); background: var(--warm-soft); border-radius: 8px; padding: 6px 10px; }
+.guia summary { cursor: pointer; font-weight: 700; }
+.guia summary small { font-weight: 500; color: var(--muted); }
+.guia ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: .9rem; }
+@media (max-width: 640px) { .av-row { grid-template-columns: minmax(0, 1fr); } }
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--bg);
   padding: 10px 16px; border-radius: 10px; opacity: 0; transition: .2s; pointer-events: none; max-width: calc(100% - 32px); z-index: 20; font-size: .9rem; }
 .toast.show { opacity: 1; transform: translateX(-50%); }
@@ -201,6 +227,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
       <button class="tab" role="tab" id="tab-formato" data-view="formato" aria-selected="true">Formato</button>
       <button class="tab" role="tab" id="tab-editar" data-view="editar" aria-selected="false">Editar</button>
       <button class="tab" role="tab" id="tab-banco" data-view="banco" aria-selected="false">Banco</button>
+      <button class="tab" role="tab" id="tab-avance" data-view="avance" aria-selected="false">Avance</button>
     </nav>
   </div>
 </header>
@@ -245,6 +272,19 @@ table.fmt td p:last-child { margin-bottom: 0; }
     </div>
     <div id="bankList"></div>
   </section>
+
+  <!-- AVANCE -->
+  <section class="view" id="v-avance" hidden>
+    <div class="toolbar">
+      <p class="hint">Avance de programa: los PDA del Programa Sintético que ya tienen al menos una planeación en tu banco. Te ayuda a ver qué falta para cubrir todos los PDA del grado en el ciclo (cuadernillo, p. 42).</p>
+      <div class="row" role="radiogroup" aria-label="Grado">
+        <label class="chk"><input type="radio" name="avg" value="1"> 1°</label>
+        <label class="chk"><input type="radio" name="avg" value="2"> 2°</label>
+        <label class="chk"><input type="radio" name="avg" value="3"> 3°</label>
+      </div>
+    </div>
+    <div id="avBody"></div>
+  </section>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -265,8 +305,37 @@ table.fmt td p:last-child { margin-bottom: 0; }
   const MODALIDADES = ["Proyecto", "Centros de interés", "Taller crítico", "Aprendizaje basado en el juego", "Unidad didáctica", "Rincones de aprendizaje"];
   const EJES = ["Inclusión", "Pensamiento crítico", "Interculturalidad crítica", "Igualdad de género", "Vida saludable",
     "Apropiación de las culturas a través de la lectura y la escritura", "Artes y experiencias estéticas"];
-  const FASES = ["1. Punto de partida", "2. Planeación", "3. ¡A trabajar!", "4. Comunicamos nuestros logros",
-    "5. Compartimos nuestros logros", "6. Reflexión sobre el aprendizaje", "C.T.E."];
+  // Momentos de cada modalidad (Cuadernillo de planeación, p. 69 "Estructura didáctica de las modalidades de trabajo").
+  const MOMENTOS = {
+    "Proyecto": ["1. Punto de partida", "2. Planeación", "3. ¡A trabajar!", "4. Comunicamos nuestros logros", "5. Reflexión sobre el aprendizaje"],
+    "Centros de interés": ["En contacto con la realidad", "Identificación e integración", "Expresión"],
+    "Taller crítico": ["Situación inicial", "Organización de las acciones", "Puesta en marcha", "Valoramos lo aprendido"],
+    "Aprendizaje basado en el juego": ["Planteamiento del juego", "Desarrollo de las actividades", "Compartimos la experiencia", "Comunidad de juego"],
+    "Unidad didáctica": ["Lectura de la realidad", "Identificación de la trama y complejidad", "Planificación y organización del trabajo", "Exploración y descubrimiento", "Participación activa y horizontal", "Valoración de la experiencia"],
+    "Rincones de aprendizaje": ["Saberes previos", "Asamblea inicial y planeación", "Exploración de los rincones", "Compartimos lo aprendido", "Reflexionar sobre el aprendizaje"],
+  };
+  // Qué diseñar en cada momento del proyecto (Cuadernillo, p. 81 "Elementos de la planeación didáctica").
+  const AYUDA_MOMENTO = [
+    [/punto de partida/, "Diseña actividades detonadoras y preguntas que recuperen saberes previos y experiencias sobre situaciones de su realidad."],
+    [/planeaci/, "Diseña actividades colaborativas para establecer acuerdos, organizar las acciones del proyecto y elaborar un organizador gráfico que dé seguimiento a su desarrollo."],
+    [/a trabajar/, "Diseña actividades de investigación, exploración y acción para comprender la situación, obtener información y elaborar la producción final."],
+    [/logros/, "Diseña acciones para compartir el proceso y la producción final con las familias y la comunidad escolar."],
+    [/reflexi/, "Diseña actividades de reflexión sobre las experiencias, los aprendizajes logrados y las dificultades enfrentadas durante el proyecto."],
+  ];
+  const sinAcentos = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const ayudaDe = (fase) => { const f = sinAcentos(fase); const m = AYUDA_MOMENTO.find(([re]) => re.test(f)); return m ? m[1] : ""; };
+  function fasesDe(plan) {
+    const out = [];
+    MODALIDADES.forEach((m) => { if (plan.modalidad.includes(m)) MOMENTOS[m].forEach((f) => { if (!out.includes(f)) out.push(f); }); });
+    if (!out.length) MOMENTOS["Proyecto"].forEach((f) => out.push(f));
+    out.push("C.T.E.");
+    return out;
+  }
+  // Claves del cuadernillo: contenidos L1, SyPC 1, ENyS 1, HyC 1 y PDA L 1.1, SyPC 4.5, etc.
+  const PREF = { "Lenguajes": "L", "Saberes y pensamiento científico": "SyPC", "Ética, naturaleza y sociedades": "ENyS", "De lo humano y lo comunitario": "HyC" };
+  const codeCont = (campo, i) => (PREF[campo] === "L" ? "L" + (i + 1) : PREF[campo] + " " + (i + 1));
+  const codePda = (campo, i, j) => PREF[campo] + " " + (i + 1) + "." + (j + 1);
+  const sinClave = (t) => String(t || "").replace(/^\s*(L|SyPC|SPC|ENyS|ENS|HyC|HC)\s?\d+\.?\s*/i, "").trim();
   const ABAJO = [
     ["ajustes", "Ajustes razonables:"],
     ["programasExternos", "Programas externos con los que asocia su planeación didáctica\n(Actividades de la comunidad)"],
@@ -306,7 +375,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
     return { fase: fase || "", titulo: "", inicio: "", desarrollo: "", cierre: "", notas: "", organizacion: "", recursos: "", tiempo: "", evaluacion: "" };
   }
   function emptyPlan() {
-    const p = { id: null, proyecto: "", modalidad: [], problematica: "", finalidad: "", ejes: [], campos: {}, pdaPermanentes: "", educacionFisica: "", actividades: [emptyAct(FASES[0])] };
+    const p = { id: null, proyecto: "", modalidad: [], problematica: "", finalidad: "", ejes: [], campos: {}, pdaPermanentes: "", educacionFisica: "", actividades: [] };
     CAMPOS.forEach((c) => (p.campos[c] = []));
     ABAJO.forEach(([k]) => (p[k] = ""));
     return p;
@@ -591,7 +660,8 @@ table.fmt td p:last-child { margin-bottom: 0; }
 
   // ------------------------------------------------------------------ editor
   function startEdit(plan) {
-    draft = plan ? normalize(plan) : normalize(emptyPlan());
+    if (plan) draft = normalize(plan);
+    else { draft = normalize(emptyPlan()); draft.modalidad = ["Proyecto"]; draft.actividades = MOMENTOS["Proyecto"].map((f) => emptyAct(f)); }
     draftDirty = false; picker = null;
     showView("editar"); renderEditor();
   }
@@ -610,6 +680,15 @@ table.fmt td p:last-child { margin-bottom: 0; }
     let h = `<div class="editor-bar"><div class="t">${esc(d.proyecto || "Planeación sin nombre")}<small>${isNew ? "Nueva planeación (aún no está en el banco)" : "Editando una planeación del banco"}${draftDirty ? " · cambios sin guardar" : ""}</small></div>
       <div class="row"><button class="btn primary" data-act="save">Guardar en el banco</button>${isNew ? "" : '<button class="btn" data-act="saveCopy">Guardar como copia nueva</button>'}<button class="btn ghost" data-act="cancel">Cerrar</button></div></div>`;
 
+    h += `<details class="card guia"><summary>Antes de realizar la planeación <small>(Cuadernillo de planeación, p. 79)</small></summary><ul>
+      <li>Reflexionar en el tema del proyecto e investigar sus posibles líneas de desarrollo.</li>
+      <li>Elegir el elemento o estrategia motivadora y seleccionar los materiales.</li>
+      <li>Definir interrogantes poderosas, que despierten el interés y lleven a tomar decisiones basadas en hechos.</li>
+      <li>Identificar cada momento de la modalidad elegida.</li>
+      <li>Identificar los contenidos y PDA a trabajar, y los PDA permanentes de lectura, escritura y matemáticas.</li>
+      <li>Analizar cómo pueden abonar al proyecto los maestros de música, educación física y UDEI.</li>
+      <li>Vincular el plan con las problemáticas del diagnóstico y con el programa analítico.</li>
+      <li>Verificar que la metodología sea adecuada al tema (la NEM recomienda proyectos).</li></ul></details>`;
     h += `<div class="card"><h2>Proyecto</h2><p class="sub">Lo que va en la primera hoja del formato.</p>
       ${fld("Nombre del proyecto", "proyecto", d.proyecto, false, "Ej. Alimentarnos bien para crecer mejor")}
       <div class="fld"><span>Modalidad</span><div class="checks">${MODALIDADES.map((m) => `<label class="chk"><input type="checkbox" data-list="modalidad" value="${esc(m)}"${d.modalidad.includes(m) ? " checked" : ""}>${esc(m)}</label>`).join("")}</div></div>
@@ -634,8 +713,8 @@ table.fmt td p:last-child { margin-bottom: 0; }
     });
     h += `<div class="grid2">${fld("PDA permanentes", "pdaPermanentes", d.pdaPermanentes, 3)}${fld("Educación física", "educacionFisica", d.educacionFisica, 3)}</div></div>`;
 
-    h += `<div class="card"><h2>Estructura didáctica</h2><p class="sub">Una tarjeta por actividad. Las actividades seguidas con la misma fase se agrupan en el formato.</p>
-      <datalist id="fasesList">${FASES.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>`;
+    h += `<div class="card"><h2>Estructura didáctica</h2><p class="sub">Una tarjeta por actividad. Los momentos que te sugiere dependen de la modalidad que marcaste (cuadernillo, p. 69). Las actividades seguidas con el mismo momento se agrupan en el formato.</p>
+      <datalist id="fasesList">${fasesDe(d).map((f) => `<option value="${esc(f)}">`).join("")}</datalist>`;
     d.actividades.forEach((a, i) => {
       const b = `actividades|${i}`;
       h += `<article class="act"><header><b>Actividad ${i + 1}</b><div class="row">
@@ -643,13 +722,14 @@ table.fmt td p:last-child { margin-bottom: 0; }
         <button class="btn sm" data-act="down" data-i="${i}" ${i === d.actividades.length - 1 ? "disabled" : ""} aria-label="Bajar">↓</button>
         <button class="btn sm" data-act="dup" data-i="${i}">Duplicar</button>
         <button class="btn sm danger" data-act="delAct" data-i="${i}">Quitar</button></div></header>
-        <div class="grid2"><label class="fld"><span>Estructura didáctica (fase)</span><input type="text" list="fasesList" data-path="${b}|fase" value="${esc(a.fase)}" placeholder="Elige o escribe la fase"></label>
+        <div class="grid2"><label class="fld"><span>Estructura didáctica (momento)</span><input type="text" list="fasesList" data-path="${b}|fase" value="${esc(a.fase)}" placeholder="Elige o escribe el momento"></label>
         ${fld("Nombre de la actividad", b + "|titulo", a.titulo)}</div>
+        <p class="ayuda" data-ayuda="${i}"${ayudaDe(a.fase) ? "" : " hidden"}>${esc(ayudaDe(a.fase))}</p>
         ${fld("Inicio", b + "|inicio", a.inicio, 3)}${fld("Desarrollo", b + "|desarrollo", a.desarrollo, 4)}${fld("Cierre", b + "|cierre", a.cierre, 2)}
         ${fld("Tarea, evidencias u otras notas", b + "|notas", a.notas, 2, "Ej. TAREA: … / (Evidencia para portafolio)")}
-        <div class="grid4">${fld("Organización", b + "|organizacion", a.organizacion, 2)}${fld("Recursos", b + "|recursos", a.recursos, 2)}${fld("Tiempo de la actividad", b + "|tiempo", a.tiempo, 2)}${fld("Evaluación", b + "|evaluacion", a.evaluacion, 2)}</div></article>`;
+        <div class="grid4">${fld("Organización", b + "|organizacion", a.organizacion, 2, "Asamblea, binas, equipos, individual…")}${fld("Recursos", b + "|recursos", a.recursos, 2, "Libros de texto, videos cortos, materiales…")}${fld("Tiempo de la actividad", b + "|tiempo", a.tiempo, 2, "Ej. Lunes 5 de octubre")}${fld("Evaluación", b + "|evaluacion", a.evaluacion, 2, "Indicador vinculado al PDA y a la actividad")}</div></article>`;
     });
-    h += `<button class="btn" data-act="addAct">+ Agregar actividad</button></div>`;
+    h += `<div class="row"><button class="btn" data-act="addAct">+ Agregar actividad</button><button class="btn ghost" data-act="addMomentos">+ Agregar una actividad por cada momento de la modalidad</button></div></div>`;
 
     h += `<div class="card"><h2>Cierre del formato</h2>${ABAJO.map(([k, l]) => fld(l.replace("\n", " "), k, d[k], 3)).join("")}</div>`;
     h += `<div class="row"><button class="btn primary" data-act="save">Guardar en el banco</button>${isNew ? "" : '<button class="btn" data-act="saveCopy">Guardar como copia nueva</button>'}</div>`;
@@ -661,9 +741,9 @@ table.fmt td p:last-child { margin-bottom: 0; }
     if (!items.length) return `<div class="picker">No se encontró el catálogo del Programa Sintético.</div>`;
     const it = items[picker.ci] || items[0];
     const pdas = (it.pda && it.pda[picker.g]) || [];
-    return `<div class="picker"><label class="fld"><span>Contenido del Programa Sintético (Fase 2)</span><select data-pk="ci">${items.map((x, i) => `<option value="${i}"${i === picker.ci ? " selected" : ""}>${esc(x.contenido)}</option>`).join("")}</select></label>
+    return `<div class="picker"><label class="fld"><span>Contenido del Programa Sintético (Fase 2)</span><select data-pk="ci">${items.map((x, i) => `<option value="${i}"${i === picker.ci ? " selected" : ""}>${esc(codeCont(picker.campo, i) + ". " + x.contenido)}</option>`).join("")}</select></label>
       <div class="row" role="radiogroup" aria-label="Grado">${["1", "2", "3"].map((g) => `<label class="chk"><input type="radio" name="pkg" data-pk="g" value="${g}"${g === picker.g ? " checked" : ""}>${g}° grado</label>`).join("")}</div>
-      <div class="pdas">${pdas.map((x, i) => `<label><input type="checkbox" data-pk="pda" value="${i}"${picker.sel.has(i) ? " checked" : ""}><span>${esc(x)}</span></label>`).join("")}</div>
+      <div class="pdas">${pdas.map((x, i) => `<label><input type="checkbox" data-pk="pda" value="${i}"${picker.sel.has(i) ? " checked" : ""}><span><b>${esc(codePda(picker.campo, picker.ci, i))}</b> ${esc(x)}</span></label>`).join("")}</div>
       <div class="row"><button class="btn sm warm" data-act="pkAdd">Agregar al formato</button><button class="btn sm" data-act="pkAll">Marcar todos</button><button class="btn sm ghost" data-act="pkClose">Cancelar</button></div></div>`;
   }
   function markDirty() { draftDirty = true; updateDirtyDot(); const s = $(".editor-bar small"); if (s && !/sin guardar/.test(s.textContent)) s.textContent += " · cambios sin guardar"; }
@@ -688,7 +768,9 @@ table.fmt td p:last-child { margin-bottom: 0; }
 
   $("#v-editar").addEventListener("input", (ev) => {
     const el = ev.target;
-    if (el.dataset.path) { setPath(el.dataset.path, el.value); markDirty(); if (el.dataset.path === "proyecto") { const t = $(".editor-bar .t"); if (t && t.firstChild) t.firstChild.nodeValue = el.value || "Planeación sin nombre"; } }
+    if (el.dataset.path) { setPath(el.dataset.path, el.value); markDirty();
+      const fm = el.dataset.path.match(/^actividades\|(\d+)\|fase$/);
+      if (fm) { const p = $(`[data-ayuda="${fm[1]}"]`); if (p) { const t = ayudaDe(el.value); p.textContent = t; p.hidden = !t; } } if (el.dataset.path === "proyecto") { const t = $(".editor-bar .t"); if (t && t.firstChild) t.firstChild.nodeValue = el.value || "Planeación sin nombre"; } }
   });
   $("#v-editar").addEventListener("change", (ev) => {
     const el = ev.target;
@@ -698,6 +780,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
       if (el.checked && i < 0) arr.push(el.value); if (!el.checked && i >= 0) arr.splice(i, 1);
       const order = el.dataset.list === "ejes" ? EJES : MODALIDADES;
       arr.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      if (el.dataset.list === "modalidad") { const dl = $("#fasesList"); if (dl) dl.innerHTML = fasesDe(draft).map((f) => `<option value="${esc(f)}">`).join(""); }
       markDirty(); return;
     }
     if (el.dataset.pk === "ci") { picker.ci = +el.value; picker.sel = new Set(); renderEditor(); }
@@ -719,15 +802,16 @@ table.fmt td p:last-child { margin-bottom: 0; }
         const it = CAT[picker.campo][picker.ci], src = (it.pda && it.pda[picker.g]) || [];
         const chosen = [...picker.sel].sort((a, b) => a - b).map((k) => src[k]);
         const list = draft.campos[picker.campo];
-        let e = list.find((x) => x.contenido.trim() === it.contenido.trim());
-        if (!e) { e = { contenido: it.contenido, pdas: [] }; list.push(e); }
+        let e = list.find((x) => sinClave(x.contenido) === it.contenido.trim());
+        if (!e) { e = { contenido: codeCont(picker.campo, picker.ci) + ". " + it.contenido, pdas: [] }; list.push(e); }
         chosen.forEach((x) => { if (!e.pdas.includes(x)) e.pdas.push(x); });
         toast(chosen.length ? `Agregado: ${chosen.length} PDA.` : "Contenido agregado. Puedes marcar PDA después.");
         picker = null; markDirty(); break;
       }
       case "addEntry": draft.campos[campo].push({ contenido: "", pdas: [] }); markDirty(); break;
       case "delEntry": draft.campos[campo].splice(i, 1); markDirty(); break;
-      case "addAct": A.push(emptyAct(A.length ? A[A.length - 1].fase : FASES[0])); markDirty(); break;
+      case "addAct": A.push(emptyAct(A.length ? A[A.length - 1].fase : fasesDe(draft)[0])); markDirty(); break;
+      case "addMomentos": fasesDe(draft).filter((f) => f !== "C.T.E.").forEach((f) => A.push(emptyAct(f))); markDirty(); break;
       case "delAct": A.splice(i, 1); markDirty(); break;
       case "dup": A.splice(i + 1, 0, clone(A[i])); markDirty(); break;
       case "up": if (i > 0) { [A[i - 1], A[i]] = [A[i], A[i - 1]]; markDirty(); } break;
@@ -825,10 +909,80 @@ table.fmt td p:last-child { margin-bottom: 0; }
   $("#btnNew").addEventListener("click", () => startEdit(null));
   $("#btnNew2").addEventListener("click", () => startEdit(null));
 
+  // ------------------------------------------------------------------ avance de programa
+  const STOP = new Set("a al con de del el en la las lo los para por que se su sus un una y e o u".split(" "));
+  const wordsOf = (t) => new Set(sinAcentos(t).replace(/[^a-z0-9ñ ]+/g, " ").split(/\s+/).filter((w) => w && !STOP.has(w)));
+  const pdaIndex = {};
+  function indexFor(g) {
+    if (pdaIndex[g]) return pdaIndex[g];
+    const out = [];
+    CAMPOS.forEach((c) => (CAT[c] || []).forEach((it, i) => ((it.pda && it.pda[g]) || []).forEach((t, j) => out.push({ code: codePda(c, i, j), w: wordsOf(t) }))));
+    return (pdaIndex[g] = out);
+  }
+  // Reconoce un PDA escrito en una planeación aunque tenga cambios pequeños de redacción.
+  function matchPda(text, g) {
+    const a = wordsOf(text); if (a.size < 3) return null;
+    let best = null, bs = 0;
+    for (const e of indexFor(g)) {
+      let n = 0; a.forEach((w) => { if (e.w.has(w)) n++; });
+      const s1 = n / Math.min(a.size, e.w.size), s2 = n / Math.max(a.size, e.w.size);
+      if (s1 >= 0.8 && s2 >= 0.5 && s1 + s2 > bs) { bs = s1 + s2; best = e.code; }
+    }
+    return best;
+  }
+  let avGrado = null, avSel = null;
+  function coverage(g) {
+    const used = {};
+    plans.forEach((p) => CAMPOS.forEach((c) => (p.campos[c] || []).forEach((e) => e.pdas.forEach((x) => {
+      const code = matchPda(x, g); if (!code) return;
+      (used[code] = used[code] || []); if (!used[code].includes(p.id)) used[code].push(p.id);
+    }))));
+    return used;
+  }
+  function renderAvance() {
+    const body = $("#avBody"); if (!body) return;
+    if (!avGrado) avGrado = gradeDefault();
+    document.querySelectorAll('input[name="avg"]').forEach((r) => (r.checked = r.value === avGrado));
+    if (!loaded) { body.innerHTML = '<div class="empty"><b>Cargando tu banco…</b></div>'; return; }
+    const used = coverage(avGrado);
+    let total = 0, hechos = 0, h = "";
+    CAMPOS.forEach((campo) => {
+      const col = CAMPO_COLOR[campo], items = CAT[campo] || [];
+      let n = 0, ok = 0, rows = "";
+      items.forEach((it, i) => {
+        const pdas = (it.pda && it.pda[avGrado]) || [];
+        let chips = "", detail = "";
+        pdas.forEach((t, j) => {
+          const code = codePda(campo, i, j), on = !!used[code]; n++; if (on) ok++;
+          chips += `<button class="av-chip${on ? " on" : ""}" data-code="${esc(code)}" aria-pressed="${avSel === code}" title="${esc(code + " " + t)}">${esc((i + 1) + "." + (j + 1))}</button>`;
+          if (avSel === code) {
+            const ps = (used[code] || []).map((id) => plans.find((p) => p.id === id)).filter(Boolean);
+            detail = `<div class="av-detail"><p><b>${esc(code)}</b> ${esc(t)}</p><p class="meta">Contenido ${esc(codeCont(campo, i))}. ${esc(it.contenido)}</p>${ps.length
+              ? `<p>Está en: </p><div class="row">${ps.map((p) => `<button class="btn sm primary" data-use="${esc(p.id)}">${esc(p.proyecto)}</button>`).join("")}</div>`
+              : "<p>Todavía ninguna planeación de tu banco trabaja este PDA.</p>"}</div>`;
+          }
+        });
+        rows += `<div class="av-row"><div class="av-cont"><b>${esc(codeCont(campo, i))}.</b> ${esc(it.contenido)}</div><div class="av-chips">${chips}</div>${detail}</div>`;
+      });
+      total += n; hechos += ok;
+      h += `<section class="av-campo" style="--cf:#${col.fill};--cfi:#${col.ink}"><header><b>${esc(campo)}</b><span>${ok} de ${n} PDA</span><div class="bar"><i style="width:${n ? (ok / n) * 100 : 0}%"></i></div></header>${rows}</section>`;
+    });
+    body.innerHTML = `<div class="card av-sum"><div><b>${hechos}</b> de ${total} PDA de ${avGrado}° grado ya tienen planeación en tu banco</div>
+      <div class="av-legend"><span><span class="av-chip on" style="--cf:var(--accent);--cfi:var(--accent-ink)">1.1</span> con planeación</span><span><span class="av-chip">1.2</span> pendiente</span><span>Toca un número para ver el PDA.</span></div></div>` + h;
+  }
+  $("#v-avance").addEventListener("change", (ev) => { if (ev.target.name === "avg") { avGrado = ev.target.value; avSel = null; renderAvance(); } });
+  $("#avBody").addEventListener("click", (ev) => {
+    const u = ev.target.closest("[data-use]");
+    if (u) { setCurrent(u.dataset.use); renderSheet(); showView("formato"); return; }
+    const c = ev.target.closest(".av-chip[data-code]"); if (!c) return;
+    avSel = avSel === c.dataset.code ? null : c.dataset.code; renderAvance();
+  });
+
   // ------------------------------------------------------------------ pestañas
   function showView(name) {
-    ["formato", "editar", "banco"].forEach((n) => { $("#v-" + n).hidden = n !== name; $("#tab-" + n).setAttribute("aria-selected", String(n === name)); });
+    ["formato", "editar", "banco", "avance"].forEach((n) => { $("#v-" + n).hidden = n !== name; $("#tab-" + n).setAttribute("aria-selected", String(n === name)); });
     if (name === "editar" && !$("#v-editar").innerHTML.trim()) renderEditor();
+    if (name === "avance") renderAvance();
     try { localStorage.setItem("bancoPlaneaciones.vista", name); } catch (e) { /* opcional */ }
     window.scrollTo(0, 0);
   }
@@ -836,6 +990,7 @@ table.fmt td p:last-child { margin-bottom: 0; }
 
   function renderAll() {
     renderSheet(); renderFilters(); renderBank();
+    if (!$("#v-avance").hidden) renderAvance();
   }
 
   renderAll();

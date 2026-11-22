@@ -8,6 +8,11 @@ Jardín de Niños “Barbarita Barrera de González” (ciclo 2026-2027).
 - **Editar**: captura o modifica una planeación. Los contenidos y PDA se pueden elegir del
   Programa Sintético de la Fase 2 (1°, 2° y 3°) sin escribirlos.
 - **Banco**: busca, filtra por campo formativo o eje, duplica, elimina y descarga o carga respaldos.
+- **Avance**: muestra qué PDA del grado (con las claves del cuadernillo, p. ej. HyC 7.1) ya tienen
+  planeación en el banco y cuáles faltan.
+
+Referencias usadas: Programa Sintético de la Fase 2 (SEP, 2024) y el Cuadernillo de Planeación
+(momentos por modalidad p. 69, elementos de la planeación pp. 79-81, claves de contenidos y PDA pp. 27 y 42-56).
 
 ## Archivos
 
